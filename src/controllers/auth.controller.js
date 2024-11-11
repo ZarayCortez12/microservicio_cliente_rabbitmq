@@ -3,69 +3,79 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { TOKEN_SECRET } from "../config.js";
 import { createAccessToken } from "../libs/jwt.js";
+import Producer from "../producer.js";
+
+const producer = new Producer();
 
 export const register = async (req, res) => {
-  try {
-    const {
-      nombres,
-      apellidos,
-      tipoIdentificacion,
-      identificacion,
-      fechaNacimiento,
-      telefono,
-      correo,
-      direccion,
-      genero,
-    } = req.body;
-
-    // Validar si el correo, documento o teléfono ya existen
-    const userFound = await User.findOne({
-      $or: [{ correo }, { identificacion }, { telefono }],
-    });
-    console.log("este es el usuario encontrado: ", userFound);
-    if (userFound) {
-      const errors = [];
-      if (userFound.correo === correo)
-        errors.push("El correo ya está registrado");
-      if (userFound.identificacion === identificacion)
-        errors.push("El documento ya está registrado");
-      if (userFound.telefono === telefono)
-        errors.push("El teléfono ya está registrado");
-      console.log(errors);
-      return res.status(400).json({
-        error: "Validation error", // Podrías incluir un error genérico
-        message: errors, // Lista de errores
+    try {
+      const {
+        nombres,
+        apellidos,
+        tipoIdentificacion,
+        identificacion,
+        fechaNacimiento,
+        telefono,
+        correo,
+        direccion,
+        genero,
+      } = req.body;
+  
+      // Validar si el correo, documento o teléfono ya existen
+      const userFound = await User.findOne({
+        $or: [{ correo }, { identificacion }, { telefono }],
       });
+      if (userFound) {
+        const errors = [];
+        if (userFound.correo === correo)
+          errors.push("El correo ya está registrado");
+        if (userFound.identificacion === identificacion)
+          errors.push("El documento ya está registrado");
+        if (userFound.telefono === telefono)
+          errors.push("El teléfono ya está registrado");
+  
+        return res.status(400).json({
+          error: "Validation error",
+          message: errors,
+        });
+      }
+  
+      // Crear el usuario si no hay duplicados
+      const newUser = new User({
+        nombres,
+        apellidos,
+        tipoIdentificacion,
+        identificacion,
+        fechaNacimiento,
+        telefono,
+        correo,
+        direccion,
+        genero,
+        password: "123456",
+      });
+  
+      // Guardar el usuario en la base de datos
+      const userSaved = await newUser.save();
+  
+      // Enviar mensaje a RabbitMQ sin afectar la respuesta al cliente
+      try {
+        await producer.publishMessage("registro", userSaved);
+        console.log("Mensaje enviado a RabbitMQ");
+      } catch (rabbitError) {
+        console.error("Error al enviar mensaje a RabbitMQ:", rabbitError);
+      }
+  
+      // Enviar respuesta al cliente
+      res.json({
+        id: userSaved._id,
+        correo: userSaved.correo,
+      });
+  
+    } catch (error) {
+      console.error("Error en el registro de usuario:", error);
+      res.status(500).json({ message: "Internal Server Error" });
     }
-    
-    // Crear el usuario si no hay duplicados
-    const newUser = new User({
-      nombres,
-      apellidos,
-      tipoIdentificacion,
-      identificacion,
-      fechaNacimiento,
-      telefono,
-      correo,
-      direccion,
-      genero,
-      password: "123456", // O generar una contraseña segura
-    });
-
-
-    // Guardar el usuario en la base de datos
-    const userSaved = await newUser.save();
-    console.log("este es el usuario guardado: ", userSaved);
-
-    res.json({
-      id: userSaved._id,
-      correo: userSaved.correo,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error });
-    console.log("este es el error: ", error);
-  }
-};
+  };
 
 
 export const login = async (req, res) => {
