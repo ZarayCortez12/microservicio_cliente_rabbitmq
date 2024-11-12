@@ -1,4 +1,3 @@
-// producer.js
 import amqp from "amqplib";
 import { rabbitMQ } from "./config.js";
 
@@ -10,27 +9,29 @@ class Producer {
     this.channel = await connection.createChannel();
   }
 
-  async publishMessage(routingKey, message) {
+  async publishMessage(messageContent) {
     if (!this.channel) {
       await this.createChannel();
     }
-
+  
     const exchangeName = rabbitMQ.exchangeName;
-    await this.channel.assertExchange(exchangeName, "direct");
-
+    await this.channel.assertExchange(exchangeName, "fanout");  // Cambia a fanout
+  
     const logDetails = {
-      logType: routingKey,
-      message: message,
+      ...messageContent,  // Contenido del mensaje
+      exchangeName,
       dateTime: new Date(),
     };
+  
+    // Al usar un "fanout" exchange, el routingKey se deja vacío ("")
     await this.channel.publish(
       exchangeName,
-      routingKey,
+      "",
       Buffer.from(JSON.stringify(logDetails))
     );
-
+  
     console.log(
-      `The new ${routingKey} log is sent to exchange ${exchangeName}`
+      `Mensaje enviado al exchange ${exchangeName} para todos los microservicios conectados.`
     );
   }
 }

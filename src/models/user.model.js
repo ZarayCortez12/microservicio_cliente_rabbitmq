@@ -31,6 +31,10 @@ const UserSchema = mongoose.Schema({
         type: String,
         required: true
     },
+    ciudad:{
+        type: String,
+        required: true
+    },
     correo:{
         type: String,
         required: true,
